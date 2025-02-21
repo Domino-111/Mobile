@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class PipeSpawner : MonoBehaviour
+public class PipeSpawner : MonoBehaviour, IStop, IRestart
 {
     [SerializeField] private GameObject pipePrefab;
 
@@ -12,8 +12,15 @@ public class PipeSpawner : MonoBehaviour
 
     private float pipeTimeLastSpawned;
 
+    private bool isActive;
+
     void Update()
     {
+        if (!isActive)
+        {
+            return;
+        }
+
         //If the current time is greater than the time we last spawned + our delay, our delay is over. We should spawn
         if (Time.time > pipeTimeLastSpawned + pipeSpawnDelay)
         {
@@ -32,4 +39,19 @@ public class PipeSpawner : MonoBehaviour
         //If yOffset is negative this will spawn the pipes lower and if the yOffset is positive it will spawn higher
         pipes.transform.position = transform.position + Vector3.up * yOffset;
     }
+
+    public void Stop()
+    {
+        isActive = false;
+    }
+
+    public void Restart()
+    {
+        isActive = true;
+
+        //Resync our spawner with current time
+        pipeTimeLastSpawned = Time.time;
+    }
+
+
 }
