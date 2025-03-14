@@ -1,14 +1,15 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public class ScreenInteractionController : MonoBehaviour
 {
-    private ScreenInteraction currentInteraction;
+    private ScreenInteraction[] currentInteraction = new ScreenInteraction[5];
 
     private static Camera _camera;
 
     new public static Camera camera => _camera;
 
-    private Vector3 touchPositionLast;
+    private Vector3[] touchPositionLast = new Vector3[5];
 
     void Start()
     {
@@ -17,37 +18,43 @@ public class ScreenInteractionController : MonoBehaviour
 
     void Update()
     {
-        CheckTouch();
+        int[] fingerIDs = GetCurrentFingerIDs();
+
+        for (int i = 0; i < 5; i++)
+        {
+            CheckTouch(i, GetCurrentFingerIDs());
+        }
+
     }
 
-    private void CheckTouch()
+    private void CheckTouch(int index, int[] excludeFingerIDs)
     {
         //If we find a touch
-        if (TouchDistributor.TryGetTouch(currentInteraction != null ? currentInteraction.fingerID : -1, out Touch touch))
+        if (TouchDistributor.TryGetTouch(currentInteraction[index] != null ? currentInteraction[index].fingerID : -1, out Touch touch, excludeFingerIDs))
         {
             //If we're starting a new interaction
-            if (currentInteraction == null)
+            if (currentInteraction[index] == null)
             {
                 //Construct one of our classes
-                currentInteraction = new ScreenInteraction(touch.fingerId, touch.position);
+                currentInteraction[index] = new ScreenInteraction(touch.fingerId, touch.position);
             }
 
             else
             {
-                currentInteraction.Poll(touch.position);
-                touchPositionLast = touch.position;
+                currentInteraction[index].Poll(touch.position);
+                touchPositionLast[index] = touch.position;
             }
 
             //Try to find a touchable if we need to
-            if (currentInteraction.touchable == null)
+            if (currentInteraction[index].touchable == null)
             {
-                CastTouch(touch.position);
+                CastTouch(touch.position, index);
             }
 
             else
             {
                 //Else we'll update our current touchable
-                ManageTouch(touch.position);
+                ManageTouch(touch.position, index);
             }
 
             //We found a touch so stop here
@@ -55,10 +62,10 @@ public class ScreenInteractionController : MonoBehaviour
         }
 
         //If we don't find a touch
-        NoTouch();
+        NoTouch(index);
     }
 
-    private void CastTouch(Vector3 touchPosition)
+    private void CastTouch(Vector3 touchPosition, int index)
     {
         Ray touchRay = _camera.ScreenPointToRay(touchPosition);
 
@@ -69,73 +76,88 @@ public class ScreenInteractionController : MonoBehaviour
             if (hit.transform.TryGetComponent<ITouchable>(out ITouchable currentTouchable))
             {
                 //Begin it's touch behaviour
-                currentInteraction.TryAddTouchable(currentTouchable);
+                currentInteraction[index].TryAddTouchable(currentTouchable);
                 currentTouchable.OnTouchBegin(touchPosition);
             }
         }
     }
 
-    private void ManageTouch(Vector3 touchPosition)
+    private void ManageTouch(Vector3 touchPosition, int index)
     {
-        currentInteraction.touchable.OnTouchStay(touchPosition);
+        currentInteraction[index].touchable.OnTouchStay(touchPosition);
     }
 
-    private void NoTouch()
+    private void NoTouch(int index)
     {
 #if UNITY_EDITOR
-        if (Input.GetMouseButton(0))
+        if (Input.GetMouseButton(0) && index == 0)
         {
-            if (currentInteraction == null)
+            if (currentInteraction[index] == null)
             {
-                currentInteraction = new ScreenInteraction(-2, Input.mousePosition);
+                currentInteraction[index] = new ScreenInteraction(-2, Input.mousePosition);
             }
 
             else
             {
-                currentInteraction.Poll(Input.mousePosition);
-                touchPositionLast = Input.mousePosition;
+                currentInteraction[index].Poll(Input.mousePosition);
+                touchPositionLast[index] = Input.mousePosition;
             }
 
-            if (currentInteraction.touchable == null)
+            if (currentInteraction[index].touchable == null)
             {
-                CastTouch(Input.mousePosition);
+                CastTouch(Input.mousePosition, index);
             }
 
             else
             {
-                ManageTouch(Input.mousePosition);
+                ManageTouch(Input.mousePosition, index);
             }
 
             return;
         }
 #endif
 
-        if (currentInteraction != null)
+        if (currentInteraction[index] != null)
         {
             //End the current interaction
-            currentInteraction.End(touchPositionLast);
+            currentInteraction[index].End(touchPositionLast[index]);
             //If we're managing a touchable
-            if (currentInteraction.touchable != null)
+            if (currentInteraction[index].touchable != null)
             {
-                currentInteraction.touchable.OnTouchEnd(touchPositionLast);
+                currentInteraction[index].touchable.OnTouchEnd(touchPositionLast[index]);
             }
 
             else
             {
                 //Try to swipe first
-                if (ScreenInteraction.Swipe.Try(currentInteraction, out ScreenInteraction.Swipe swipe))
+                if (ScreenInteraction.Swipe.Try(currentInteraction[index], out ScreenInteraction.Swipe swipe))
                 {
                     Debug.Log($"Did a swipe, from {swipe.start} to {swipe.end} covering distance of {swipe.distance}");
                 }
 
-                else if (ScreenInteraction.Tap.Try(currentInteraction, out ScreenInteraction.Tap tap))
+                else if (ScreenInteraction.Tap.Try(currentInteraction[index], out ScreenInteraction.Tap tap))
                 {
                     Debug.Log($"Did a tap at {tap.screenPosition}. In world, this is {tap.WorldPosition}");
                 }
             }
 
-            currentInteraction = null;
+            currentInteraction[index] = null;
         }
+    }
+
+    private int[] GetCurrentFingerIDs()
+    {
+        List<int> fingerIDs = new();
+
+        foreach (ScreenInteraction interaction in currentInteraction)
+        {
+            if (interaction != null)
+            {
+                fingerIDs.Add(interaction.fingerID);
+            }
+        }
+
+        return fingerIDs.ToArray();
     }
 }
 
